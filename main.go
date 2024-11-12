@@ -4,15 +4,16 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 )
 
 const PORT = "6969"
 
-const SAFE_MODE = true
+const SAFE_MODE = false
 
 type Client struct {
-	conn     net.Conn
-	outgoing chan string
+	Conn        net.Conn
+	LastMessage time.Time
 }
 
 type MessageType int
@@ -20,7 +21,7 @@ type MessageType int
 const (
 	ClientConnected MessageType = iota + 1
 	NewMessage
-	DeleteClient
+	ClientDisconncted
 )
 
 type Message struct {
@@ -38,22 +39,28 @@ func safeRemoteAddress(conn net.Conn) string {
 }
 
 func server(messages chan Message) {
-	conns := make([]net.Conn, 512)
+	conns := map[string]net.Conn{}
 
 	for {
 		msg := <-messages
 
 		switch msg.Type {
 		case ClientConnected:
-			conns = append(conns, msg.Conn)
-		case DeleteClient:
+			log.Printf("Client Connected  %s", safeRemoteAddress(msg.Conn))
+			conns[msg.Conn.RemoteAddr().String()] = msg.Conn
+		case ClientDisconncted:
+			log.Printf("Client Disconnected  %s", safeRemoteAddress(msg.Conn))
 			msg.Conn.Close()
+			delete(conns, msg.Conn.RemoteAddr().String())
 		case NewMessage:
+			log.Printf("Client %s sent message : %s", safeRemoteAddress(msg.Conn), msg.Text)
 			for _, conn := range conns {
-				_, err := conn.Write([]byte(msg.Text))
-				if err != nil {
-					// TODO : Remove connection from the list
-					fmt.Printf("Could not send data to : %s : %s", safeRemoteAddress((conn)), err)
+				if conn.RemoteAddr().String() != msg.Conn.RemoteAddr().String() {
+					_, err := conn.Write([]byte(msg.Text))
+					if err != nil {
+						// TODO : Remove connection from the list
+						fmt.Printf("Could not send data to : %s : %s\n", safeRemoteAddress(conn), err)
+					}
 				}
 			}
 		}
@@ -61,16 +68,20 @@ func server(messages chan Message) {
 }
 
 func client(conn net.Conn, messages chan Message) {
+	// defer conn.Close()
 
 	buffer := make([]byte, 512)
 
 	for {
 		n, err := conn.Read(buffer)
 		if err != nil {
+			log.Printf("Could not read from client %s : %s \n", safeRemoteAddress(conn), err)
+			conn.Close()
 			messages <- Message{
-				Type: DeleteClient,
+				Type: ClientDisconncted,
 				Conn: conn,
 			}
+			return
 		}
 
 		messages <- Message{
