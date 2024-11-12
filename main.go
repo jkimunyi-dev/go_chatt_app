@@ -7,9 +7,13 @@ import (
 	"time"
 )
 
-const PORT = "6969"
+const (
+	MessageRate = 1.0
 
-const SAFE_MODE = false
+	PORT = "6969"
+
+	SAFE_MODE = false
+)
 
 type Client struct {
 	Conn        net.Conn
@@ -39,7 +43,7 @@ func safeRemoteAddress(conn net.Conn) string {
 }
 
 func server(messages chan Message) {
-	conns := map[string]net.Conn{}
+	clients := map[string]*Client{}
 
 	for {
 		msg := <-messages
@@ -47,22 +51,35 @@ func server(messages chan Message) {
 		switch msg.Type {
 		case ClientConnected:
 			log.Printf("Client Connected  %s", safeRemoteAddress(msg.Conn))
-			conns[msg.Conn.RemoteAddr().String()] = msg.Conn
+			clients[msg.Conn.RemoteAddr().String()] = &Client{
+				Conn:        msg.Conn,
+				LastMessage: time.Now(),
+			}
 		case ClientDisconncted:
 			log.Printf("Client Disconnected  %s", safeRemoteAddress(msg.Conn))
 			msg.Conn.Close()
-			delete(conns, msg.Conn.RemoteAddr().String())
+			delete(clients, msg.Conn.RemoteAddr().String())
 		case NewMessage:
-			log.Printf("Client %s sent message : %s", safeRemoteAddress(msg.Conn), msg.Text)
-			for _, conn := range conns {
-				if conn.RemoteAddr().String() != msg.Conn.RemoteAddr().String() {
-					_, err := conn.Write([]byte(msg.Text))
-					if err != nil {
-						// TODO : Remove connection from the list
-						fmt.Printf("Could not send data to : %s : %s\n", safeRemoteAddress(conn), err)
+			now := time.Now()
+
+			addr := msg.Conn.RemoteAddr().String()
+
+			author := clients[addr]
+
+			if now.Sub(author.LastMessage).Seconds() >= MessageRate {
+				author.LastMessage = now
+				log.Printf("Client %s sent message : %s", safeRemoteAddress(msg.Conn), msg.Text)
+				for _, client := range clients {
+					if client.Conn.RemoteAddr().String() != addr {
+						_, err := client.Conn.Write([]byte(msg.Text))
+						if err != nil {
+							// TODO : Remove connection from the list
+							fmt.Printf("Could not send data to : %s : %s\n", safeRemoteAddress(client.Conn), err)
+						}
 					}
 				}
 			}
+
 		}
 	}
 }
