@@ -14,7 +14,7 @@ const (
 
 	SAFE_MODE = true
 
-	BanLimit = 10.0
+	BanLimit = 600.0
 
 	StrikeLimit = 10
 )
@@ -77,7 +77,7 @@ func server(messages chan Message) {
 					LastMessage: time.Now(),
 				}
 			} else {
-				msg.Conn.Write([]byte("You are banned \n"))
+				msg.Conn.Write([]byte(fmt.Sprintf("You are banned  : %f secs left \n", BanLimit-(now.Sub(bannedAt).Seconds()))))
 				msg.Conn.Close()
 			}
 
@@ -105,7 +105,7 @@ func server(messages chan Message) {
 						_, err := client.Conn.Write([]byte(msg.Text))
 						if err != nil {
 							// TODO : Remove connection from the list
-							fmt.Printf("Could not send data to : %s : %s\n", sensitive(authorAddr.String()), err)
+							fmt.Printf("Could not send data to : %s : %s\n", sensitive(authorAddr.String()), sensitive(err.Error()))
 						}
 					}
 				}
@@ -134,7 +134,7 @@ func client(conn net.Conn, messages chan Message) {
 	for {
 		n, err := conn.Read(buffer)
 		if err != nil {
-			log.Printf("Could not read from client %s : %s \n", sensitive(addr.String()), err)
+			log.Printf("Could not read from client %s : %s \n", sensitive(addr.String()), sensitive(err.Error()))
 			conn.Close()
 			messages <- Message{
 				Type: ClientDisconncted,
@@ -155,7 +155,7 @@ func client(conn net.Conn, messages chan Message) {
 func main() {
 	ln, err := net.Listen("tcp", ":"+PORT)
 	if err != nil {
-		log.Fatalf("Could not connect to port : %s : %s \n", PORT, err)
+		log.Fatalf("Could not connect to port : %s : %s \n", PORT, sensitive(err.Error()))
 	}
 
 	log.Printf("Listening to TCP connection on port : %s ...\n", PORT)
@@ -170,7 +170,7 @@ func main() {
 		addr := conn.RemoteAddr().(*net.TCPAddr)
 
 		if err != nil {
-			log.Printf("Connection not accepted : %s : %s \n", err)
+			log.Printf("Connection not accepted : %s : %s \n", sensitive(err.Error()))
 		}
 
 		fmt.Printf("Accepted connection from : %s \n", sensitive(addr.String()))
