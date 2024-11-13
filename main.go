@@ -94,30 +94,35 @@ func server(messages chan Message) {
 
 			author := clients[authorAddr.String()]
 
-			if now.Sub(author.LastMessage).Seconds() >= MessageRate {
-				author.StrikeCount = 0
+			if author != nil {
 
-				author.LastMessage = now
+				if now.Sub(author.LastMessage).Seconds() >= MessageRate {
+					author.StrikeCount = 0
 
-				log.Printf("Client %s sent message : %s", sensitive(authorAddr.String()), msg.Text)
-				for _, client := range clients {
-					if client.Conn.RemoteAddr().String() != client.Conn.RemoteAddr().String() {
-						_, err := client.Conn.Write([]byte(msg.Text))
-						if err != nil {
-							// TODO : Remove connection from the list
-							fmt.Printf("Could not send data to : %s : %s\n", sensitive(authorAddr.String()), sensitive(err.Error()))
+					author.LastMessage = now
+
+					log.Printf("Client %s sent message : %s", sensitive(authorAddr.String()), msg.Text)
+					for _, client := range clients {
+						if client.Conn.RemoteAddr().String() != client.Conn.RemoteAddr().String() {
+							_, err := client.Conn.Write([]byte(msg.Text))
+							if err != nil {
+								// TODO : Remove connection from the list
+								fmt.Printf("Could not send data to : %s : %s\n", sensitive(authorAddr.String()), sensitive(err.Error()))
+							}
 						}
 					}
-				}
 
-			} else {
-				author.StrikeCount += 1
-				if author.StrikeCount >= StrikeLimit {
-					// Bann user
-					bannedMfs[authorAddr.IP.String()] = now
-					author.Conn.Write([]byte("You are banned \n"))
-					msg.Conn.Close()
+				} else {
+					author.StrikeCount += 1
+					if author.StrikeCount >= StrikeLimit {
+						// Bann user
+						bannedMfs[authorAddr.IP.String()] = now
+						author.Conn.Write([]byte("You are banned \n"))
+						msg.Conn.Close()
+					}
 				}
+			} else {
+				msg.Conn.Close()
 			}
 
 		}
